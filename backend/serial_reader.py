@@ -5,6 +5,8 @@ import time
 import threading
 from typing import Any, Dict, List, Optional
 
+import logging
+
 import serial
 from serial.tools import list_ports
 
@@ -14,6 +16,9 @@ from .processor import process_sensor_data
 
 _ser: Optional[serial.Serial] = None
 _lock = threading.Lock()
+_stop_event = threading.Event()
+
+logger = logging.getLogger("flood.serial")
 
 _status: Dict[str, Any] = {
     "connected": False,
@@ -94,12 +99,12 @@ def _connect(port: str) -> Optional[serial.Serial]:
             last_error=None,
             last_connected_at=time.time(),
         )
-        print(f"[INFO] Connected to {port} @ {settings.SERIAL_BAUDRATE}")
+        logger.info("serial_connected port=%s baudrate=%s", port, settings.SERIAL_BAUDRATE)
         return ser
     except Exception as e:
         _ser = None
         _set_status(connected=False, port=port, last_error=str(e))
-        print(f"[ERROR] Serial connection failed ({port}): {e}")
+        logger.error("serial_connect_failed port=%s error=%s", port, e)
         return None
 
 
@@ -112,7 +117,7 @@ def get_serial_connection() -> Optional[serial.Serial]:
     if not port:
         port = _auto_detect_port()
         if port:
-            print(f"[INFO] Auto-detected serial port: {port}")
+            logger.info("serial_autodetected_port port=%s", port)
         else:
             _set_status(connected=False, port=None, last_error="No serial ports detected")
             return None
@@ -121,16 +126,18 @@ def get_serial_connection() -> Optional[serial.Serial]:
 
 
 def start_serial_listener() -> None:
-    print("[INFO] Serial listener starting...")
-    while True:
+    logger.info("serial_listener_starting")
+    _stop_event.clear()
+    connection: Optional[serial.Serial] = None
+    while not _stop_event.is_set():
         connection = get_serial_connection()
         if not connection:
             time.sleep(settings.SERIAL_CONNECT_RETRY_SECONDS)
             continue
 
-        print("[INFO] Listening for sensor data...")
+        logger.info("serial_listening")
         try:
-            while True:
+            while not _stop_event.is_set():
                 raw = connection.readline()
                 if not raw:
                     continue
@@ -151,13 +158,26 @@ def start_serial_listener() -> None:
 
         except Exception as e:
             _set_status(connected=False, last_error=str(e))
-            print(f"[ERROR] Serial read loop failed: {e}")
+            logger.error("serial_read_loop_failed error=%s", e)
             try:
                 connection.close()
             except Exception:
                 pass
             _ser = None
             time.sleep(settings.SERIAL_CONNECT_RETRY_SECONDS)
+
+    # Shutdown path
+    try:
+        if connection and getattr(connection, "is_open", False):
+            connection.close()
+    except Exception:
+        pass
+    _set_status(connected=False)
+    logger.info("serial_listener_stopped")
+
+
+def stop_serial_listener() -> None:
+    _stop_event.set()
 
 
 def send_alert(command: str) -> None:
@@ -169,4 +189,4 @@ def send_alert(command: str) -> None:
         connection.write((command + "\n").encode())
     except Exception as e:
         _set_status(last_error=str(e))
-        print(f"[ERROR] Serial write failed: {e}")
+        logger.error("serial_write_failed error=%s", e)

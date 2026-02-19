@@ -17,6 +17,25 @@ def _normalize_ollama_url(url: str) -> str:
     return url
 
 
+def ollama_is_available(timeout_seconds: float | None = None) -> tuple[bool, str | None]:
+    """Best-effort check that Ollama is reachable.
+
+    Uses /api/tags which is cheap and doesn't require generating tokens.
+    """
+    timeout = float(timeout_seconds) if timeout_seconds is not None else float(settings.HEALTHCHECK_TIMEOUT_SECONDS)
+    try:
+        generate_url = _normalize_ollama_url(settings.OLLAMA_URL)
+        parsed = urlparse(generate_url)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        url = base.rstrip("/") + "/api/tags"
+        resp = requests.get(url, timeout=timeout)
+        if not resp.ok:
+            return False, f"HTTP {resp.status_code}: {resp.text}"
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 def ollama_generate(prompt: str) -> str:
     url = _normalize_ollama_url(settings.OLLAMA_URL)
     try:

@@ -1,32 +1,91 @@
-from fastapi import FastAPI, Depends
+from contextlib import asynccontextmanager
+import logging
+
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 import threading
+from sqlalchemy import text
 
 from .database import engine, get_db
 from .config import settings
 from .models import Base, SensorReading
-from .serial_reader import start_serial_listener, get_serial_status, list_serial_ports
-from .llm_engine import ollama_generate, generate_explanation
+from .serial_reader import start_serial_listener, stop_serial_listener, get_serial_status, list_serial_ports
+from .llm_engine import ollama_generate, generate_explanation, ollama_is_available
 from .shap_engine import explain_row
 from .feature_engineering import FEATURE_BUFFER
+from .logging_config import configure_logging
+from .validation import normalize_sensor_payload
 
-app = FastAPI()
+logger = logging.getLogger("flood.api")
 
-_serial_thread_started = False
+_serial_thread: threading.Thread | None = None
 
 
-@app.on_event("startup")
-def startup_event():
-    global _serial_thread_started
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _serial_thread
+
+    configure_logging()
+    logger.info("app_starting")
 
     # Create tables on startup (avoids import-time crash if env isn't ready yet).
     Base.metadata.create_all(bind=engine)
 
-    if not _serial_thread_started:
-        thread = threading.Thread(target=start_serial_listener, name="serial-listener", daemon=True)
-        thread.start()
-        _serial_thread_started = True
-        print("[INFO] Serial listener started")
+    if _serial_thread is None or not _serial_thread.is_alive():
+        _serial_thread = threading.Thread(target=start_serial_listener, name="serial-listener", daemon=True)
+        _serial_thread.start()
+        logger.info("serial_listener_started")
+
+    try:
+        yield
+    finally:
+        logger.info("app_stopping")
+        stop_serial_listener()
+        if _serial_thread is not None:
+            _serial_thread.join(timeout=3)
+        logger.info("app_stopped")
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready(require_serial: bool = True, include_llm: bool = False):
+    # DB check
+    db_ok = False
+    db_error = None
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as e:
+        db_error = str(e)
+
+    serial = get_serial_status()
+    serial_ok = bool(serial.get("connected"))
+
+    llm_ok = None
+    llm_error = None
+    if include_llm:
+        llm_ok, llm_error = ollama_is_available()
+
+    is_ready = db_ok and (serial_ok if require_serial else True) and (llm_ok if include_llm else True)
+    payload = {
+        "ready": is_ready,
+        "db": {"ok": db_ok, "error": db_error},
+        "serial": {"ok": serial_ok, "port": serial.get("port"), "error": serial.get("last_error")},
+    }
+    if include_llm:
+        payload["llm"] = {"ok": bool(llm_ok), "error": llm_error, "model": settings.OLLAMA_MODEL}
+
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
 
 
 @app.get("/latest")
@@ -92,12 +151,12 @@ def shap_explain_latest(db: Session = Depends(get_db), top_k: int = 6):
         return {"status": "No data yet"}
 
     # Build a best-effort feature row using the latest raw reading.
-    raw = {
-        "distance_cm": record.distance_cm,
-        "rain_analog": record.rain_analog,
-        "float_status": record.float_status,
-    }
-    engineered = FEATURE_BUFFER.build_features(raw, update_state=False)
+    raw = {"distance_cm": record.distance_cm, "rain_analog": record.rain_analog, "float_status": record.float_status}
+    normalized = normalize_sensor_payload(raw)
+    if normalized.errors:
+        raise HTTPException(status_code=422, detail={"error": "latest_sample_not_explainable", "errors": normalized.errors})
+
+    engineered = FEATURE_BUFFER.build_features(normalized.payload, update_state=False)
     exp = explain_row(engineered, top_k=top_k)
     return {
         "id": record.id,

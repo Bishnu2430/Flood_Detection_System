@@ -60,6 +60,9 @@ class FeatureBuffer:
             rain_analog = float(raw.get("rain_analog"))
             float_status = int(raw.get("float_status"))
 
+            if distance_cm < 0:
+                raise ValueError("distance_cm is invalid (< 0)")
+
             current = _Sample(ts=now_ts, distance_cm=distance_cm, rain_analog=rain_analog, float_status=float_status)
 
             # Snapshot state so we can compute without mutating.

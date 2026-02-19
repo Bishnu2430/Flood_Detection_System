@@ -26,6 +26,10 @@ class Settings:
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
     OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
 
+    # Observability
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    HEALTHCHECK_TIMEOUT_SECONDS = float(os.getenv("HEALTHCHECK_TIMEOUT_SECONDS", "2"))
+
     # Serial
     # On Windows, typical ports are COM3/COM4. If unset, backend will auto-detect.
     SERIAL_PORT = os.getenv("SERIAL_PORT")

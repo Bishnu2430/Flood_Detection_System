@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, DateTime
+from sqlalchemy import Column, Integer, Float, DateTime, Text
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -14,5 +14,7 @@ class SensorReading(Base):
 
     predicted_risk = Column(Integer)
     risk_probability = Column(Float)
+
+    explanation = Column(Text)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

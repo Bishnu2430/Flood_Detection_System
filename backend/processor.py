@@ -19,9 +19,13 @@ def process_sensor_data(data: dict):
 
         # LLM reasoning + Arduino alert if high risk
         # Only run if risk is available.
+        explanation = None
         if risk is not None and prob is not None:
             if risk >= 2:
-                _ = generate_explanation(data, risk, prob)
+                try:
+                    explanation = generate_explanation(data, risk, prob)
+                except Exception as e:
+                    print(f"[WARN] LLM explanation failed: {e}")
                 send_alert("ALERT_ON")
             else:
                 send_alert("ALERT_OFF")
@@ -33,6 +37,7 @@ def process_sensor_data(data: dict):
             float_status=int(data["float_status"]),
             predicted_risk=risk,
             risk_probability=prob,
+            explanation=explanation,
         )
 
         db.add(record)

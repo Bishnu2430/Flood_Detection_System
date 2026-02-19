@@ -24,6 +24,7 @@ class Settings:
     # or just host (we'll handle missing path in llm_engine if needed).
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+    OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
 
     # Serial
     # On Windows, typical ports are COM3/COM4. If unset, backend will auto-detect.

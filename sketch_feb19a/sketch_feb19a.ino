@@ -1,129 +1,84 @@
-/*
-  Agentic Flood Risk Intelligence System
-  Arduino Uno R3 - Final Stable Version
-*/
-
 #define TRIG_PIN 9
 #define ECHO_PIN 10
+#define BUZZER_PIN 3
+#define FLOAT_PIN 2
 #define RAIN_PIN A0
-#define FLOAT_PIN 7
 
-#define GREEN_LED 4
-#define YELLOW_LED 5
-#define RED_LED 6
-#define BUZZER 8
-
-#define TANK_HEIGHT 50.0   // Adjust according to setup (cm)
-#define SAFE_LEVEL 20.0
-#define WARNING_LEVEL 35.0
-
-long duration;
-float distance;
-float waterHeight;
+// Ultrasonic settings
+const int samples = 5;
 
 void setup() {
   Serial.begin(9600);
 
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+
+  pinMode(BUZZER_PIN, OUTPUT);
   pinMode(FLOAT_PIN, INPUT_PULLUP);
 
-  pinMode(GREEN_LED, OUTPUT);
-  pinMode(YELLOW_LED, OUTPUT);
-  pinMode(RED_LED, OUTPUT);
-  pinMode(BUZZER, OUTPUT);
-
-  Serial.println("SYSTEM_READY");
+  digitalWrite(BUZZER_PIN, LOW);
 }
 
-float getUltrasonicDistance() {
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
+float readUltrasonic() {
+  long total = 0;
+  int valid = 0;
 
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+  for (int i = 0; i < samples; i++) {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
 
-  duration = pulseIn(ECHO_PIN, HIGH, 30000); // timeout 30ms
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
 
-  if (duration == 0) return -1;
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000);
 
-  return duration * 0.034 / 2.0;
-}
+    float distance = duration * 0.034 / 2;
 
-void setSafe() {
-  digitalWrite(GREEN_LED, HIGH);
-  digitalWrite(YELLOW_LED, LOW);
-  digitalWrite(RED_LED, LOW);
-  digitalWrite(BUZZER, LOW);
-}
+    if (distance > 2 && distance < 400) {
+      total += distance;
+      valid++;
+    }
 
-void setWarning() {
-  digitalWrite(GREEN_LED, LOW);
-  digitalWrite(YELLOW_LED, HIGH);
-  digitalWrite(RED_LED, LOW);
-  digitalWrite(BUZZER, LOW);
-}
+    delay(50);
+  }
 
-void setFlood() {
-  digitalWrite(GREEN_LED, LOW);
-  digitalWrite(YELLOW_LED, LOW);
-  digitalWrite(RED_LED, HIGH);
-  digitalWrite(BUZZER, HIGH);
+  if (valid > 0) {
+    return total / (float)valid;
+  } else {
+    return -1; // invalid reading
+  }
 }
 
 void loop() {
 
-  distance = getUltrasonicDistance();
-
-  if (distance > 0) {
-    waterHeight = TANK_HEIGHT - distance;
-    if (waterHeight < 0) waterHeight = 0;
-  }
-
+  float distance = readUltrasonic();
   int rainValue = analogRead(RAIN_PIN);
-  int floatState = digitalRead(FLOAT_PIN);
 
-  bool flood = false;
-  bool warning = false;
+  // Float switch logic (LOW = triggered)
+  int floatRaw = digitalRead(FLOAT_PIN);
+  int floatStatus = (floatRaw == LOW) ? 1 : 0;
 
-  // Emergency float override
-  if (floatState == LOW) {
-    flood = true;
+  // Simple emergency buzzer logic
+  if (floatStatus == 1) {
+    digitalWrite(BUZZER_PIN, HIGH);
+  } else {
+    digitalWrite(BUZZER_PIN, LOW);
   }
 
-  if (waterHeight > WARNING_LEVEL) {
-    flood = true;
-  }
-  else if (waterHeight > SAFE_LEVEL) {
-    warning = true;
-  }
-
-  if (flood) setFlood();
-  else if (warning) setWarning();
-  else setSafe();
-
-  // Structured serial output (JSON-like)
+  // JSON Output
   Serial.print("{");
-  Serial.print("\"height\":"); Serial.print(waterHeight);
-  Serial.print(",\"rain\":"); Serial.print(rainValue);
-  Serial.print(",\"float\":"); Serial.print(floatState);
-  Serial.print(",\"status\":");
   
-  if (flood) Serial.print("\"CRITICAL\"");
-  else if (warning) Serial.print("\"WARNING\"");
-  else Serial.print("\"SAFE\"");
-  
-  Serial.println("}");
+  Serial.print("\"distance_cm\":");
+  Serial.print(distance);
 
-  // Listen for backend alert override
-  if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();
-    
-    if (cmd == "ALERT_ON") setFlood();
-    if (cmd == "ALERT_OFF") setSafe();
-  }
+  Serial.print(",\"rain_analog\":");
+  Serial.print(rainValue);
+
+  Serial.print(",\"float_status\":");
+  Serial.print(floatStatus);
+
+  Serial.println("}");
 
   delay(1000);
 }

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pyserial
+sqlalchemy
+psycopg2-binary
+requests
+joblib
+pandas
+pytest
+python-dotenv
+scikit-learn==1.6.1

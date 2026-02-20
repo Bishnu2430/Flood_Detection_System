@@ -53,7 +53,27 @@ def predict_risk(sensor_data: Dict[str, Any]) -> Tuple[int, float]:
         raise RuntimeError("Model metadata missing 'features'")
 
     raw = _normalize_raw(sensor_data)
-    engineered = FEATURE_BUFFER.build_features(raw)
+    engineered = FEATURE_BUFFER.build_features(raw, update_state=True)
+
+    row = pd.DataFrame([engineered])
+    row = row.reindex(columns=features, fill_value=0.0)
+
+    prediction = int(model.predict(row)[0])
+    probas = model.predict_proba(row)[0]
+    probability = float(probas[prediction])
+    return prediction, probability
+
+
+def predict_risk_no_state(sensor_data: Dict[str, Any]) -> Tuple[int, float]:
+    """Return (risk_class, probability) without mutating FeatureBuffer state."""
+    model = _load_model()
+    meta = _load_meta()
+    features = meta.get("features")
+    if not features:
+        raise RuntimeError("Model metadata missing 'features'")
+
+    raw = _normalize_raw(sensor_data)
+    engineered = FEATURE_BUFFER.build_features(raw, update_state=False)
 
     row = pd.DataFrame([engineered])
     row = row.reindex(columns=features, fill_value=0.0)
@@ -67,6 +87,14 @@ def predict_risk(sensor_data: Dict[str, Any]) -> Tuple[int, float]:
 def predict_risk_safe(sensor_data: Dict[str, Any]) -> Tuple[int | None, float | None, str | None]:
     try:
         risk, prob = predict_risk(sensor_data)
+        return risk, prob, None
+    except Exception as e:
+        return None, None, str(e)
+
+
+def predict_risk_safe_no_state(sensor_data: Dict[str, Any]) -> Tuple[int | None, float | None, str | None]:
+    try:
+        risk, prob = predict_risk_no_state(sensor_data)
         return risk, prob, None
     except Exception as e:
         return None, None, str(e)

@@ -1,6 +1,6 @@
 # Flood Detection System — Current State (as implemented)
 
-Date: 2026-02-19
+Date: 2026-02-20
 
 ## 1) What works end-to-end
 
@@ -12,6 +12,10 @@ This repo currently supports an end-to-end pipeline:
 4. Backend stores raw + ML outputs into PostgreSQL.
 5. If risk is high (>= 2), backend requests an LLM explanation from Ollama and stores it.
 6. Backend sends an `ALERT_ON` / `ALERT_OFF` command back to Arduino over serial.
+
+Additionally:
+
+- A React dashboard in `frontend/` visualizes latest readings, trends, SHAP explainability, and live LLM streaming output.
 
 ## 2) Repo structure
 
@@ -147,10 +151,14 @@ Connect via psql (local dev):
   - lists available serial ports
 - `GET /llm/test?prompt=...`
   - sanity-check Ollama connectivity
-- `GET /llm/explain/latest`
-  - generates an explanation on-demand for latest record (does not persist)
+- `GET /llm/explain/stream/latest`
+  - streams a live explanation for the latest record using Server-Sent Events (SSE)
+  - emits events: `meta`, `ml_perf`, repeated `token`, then `done`
+- `GET /ml/predict/latest`
+  - best-effort ML timing + prediction for the latest reading
 - `GET /shap/explain/latest?top_k=6`
-  - returns top SHAP feature contributions for latest record
+  - returns top SHAP feature contributions for the latest reading
+  - SHAP direction is defined against a risk target class (typically the highest severity label)
 
 ## 6) Configuration (.env)
 
@@ -174,15 +182,21 @@ Common keys:
 
 1. Start infra:
    - `docker compose up -d`
-2. Activate venv and install deps:
-   - `python -m venv venv`
-   - `./venv/Scripts/python -m pip install -r backend/requirements.txt`
-3. Run backend:
-   - `uvicorn backend.main:app --host 127.0.0.1 --port 8000`
+2. Install backend deps into the existing repo venv:
+
+- `./venv/Scripts/python.exe -m pip install -r backend/requirements.txt`
+
+3. Run backend using that venv:
+
+- `./venv/Scripts/python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload`
+
+4. Run the dashboard:
+
+- `cd frontend && npm install && npm run dev`
 
 ## 8) Known limitations / gaps
 
-- No dashboard UI is included.
+- Serial may be disconnected in dev (COM port not present). Use readiness checks with `require_serial=false`.
 - No external notification service is implemented (only serial `ALERT_ON/OFF`).
 - Engineered features use an in-memory buffer; restarting the backend resets rolling/trend features.
 - Arduino may emit `distance_cm = -1` on invalid ultrasonic reads; the backend currently stores it as-is.

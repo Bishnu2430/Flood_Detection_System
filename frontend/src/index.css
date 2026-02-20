@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-gradient-to-br from-sky-50 via-white to-blue-50/60 text-slate-900 antialiased;
+  }
+
+  a {
+    @apply underline underline-offset-4;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-blue-400 ring-offset-2;
+  }
+}

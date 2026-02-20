@@ -55,15 +55,17 @@ The Arduino node is responsible for:
 
 Each sensor reading is emitted as a single JSON object per line:
 
-```json
-{ "distance_cm": 123.4, "rain_analog": 512, "float_status": 0 }
-```
+Each line contains three fields:
+
+- distance_cm: ultrasonic distance reading in centimeters
+- rain_analog: raw rain sensor analog reading (commonly 0–1023)
+- float_status: 1 if the float switch is triggered, otherwise 0
 
 Field meanings:
 
-- `distance_cm` (float): Ultrasonic distance reading (cm). If the sensor fails, the sketch may output `-1`.
-- `rain_analog` (int): Raw ADC reading (typically 0–1023).
-- `float_status` (int): 1 if triggered, else 0.
+- distance_cm (float): Ultrasonic distance reading (cm). If the sensor fails, the sketch may output -1.
+- rain_analog (int): Raw ADC reading (typically 0–1023).
+- float_status (int): 1 if triggered, else 0.
 
 ## 4) Backend Service Responsibilities
 
@@ -84,8 +86,8 @@ The backend (FastAPI) is the system hub that:
 
 The risk model produces:
 
-- `predicted_risk` (int): discrete class (e.g., Safe/Warning/Critical).
-- `risk_probability` (float): probability associated with the predicted class.
+- predicted_risk (int): discrete class (e.g., Safe/Warning/Critical).
+- risk_probability (float): probability associated with the predicted class.
 
 ### Feature Engineering Requirement
 
@@ -145,6 +147,19 @@ This supports:
 - **PostgreSQL** runs in Docker.
 - **Ollama (LLM runtime)** runs in Docker with a persistent model volume.
 - **FastAPI backend** runs locally (Python venv) and connects to both.
+
+## 9.1) Local Dashboard (React)
+
+A minimal React dashboard is available in the frontend folder.
+
+Dev workflow:
+
+- Start backend (FastAPI) on http://localhost:8000
+- Start frontend dev server on http://localhost:5173
+
+The frontend calls the backend over HTTP.
+
+Note: the dashboard supports a configurable backend base URL (for hosted or non-proxied setups). In local dev it typically talks directly to the backend on 127.0.0.1:8000 unless you override the base URL via environment configuration.
 
 ## 10) Future Extensions (Concept-level)
 

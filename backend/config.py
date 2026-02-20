@@ -23,7 +23,7 @@ class Settings:
     # Expect either full endpoint (e.g., http://localhost:11434/api/generate)
     # or just host (we'll handle missing path in llm_engine if needed).
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3:mini")
     OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
 
     # Observability
@@ -35,6 +35,16 @@ class Settings:
     SERIAL_PORT = os.getenv("SERIAL_PORT")
     SERIAL_BAUDRATE = int(os.getenv("SERIAL_BAUDRATE", "9600"))
     SERIAL_CONNECT_RETRY_SECONDS = float(os.getenv("SERIAL_CONNECT_RETRY_SECONDS", "2"))
+
+    # CORS (comma-separated list). Use '*' only for local dev.
+    CORS_ORIGINS = [
+        o.strip()
+        for o in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173",
+        ).split(",")
+        if o.strip()
+    ]
 
 
 settings = Settings()
